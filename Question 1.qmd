@@ -1,0 +1,149 @@
+# Question 1 (Exploratory Data Analysis)
+
+```{r}
+data <- read.table("STA4026_Assignment_Clustering.txt")
+```
+
+## a)
+
+```{r}
+data1 <- as.data.frame(data)
+
+# Remove missing values and replace them with 0
+data1 <- na.omit(data1)
+data1[is.na(data1)] <- 0
+
+# Remove duplicates
+data1 <- data1[!duplicated(data1), ]
+
+# Results
+paste0("No. of observations before cleaning: ", length(data1))
+paste0("No. of observations after cleaning: ", length(data1))
+apply(data1, 2, quantile, probs = c(0.25, 0.5, 0.75))
+
+# Descriptive Statistics
+desc_stats <- function(data){
+  return(data.frame(
+  Min = apply(data, 2, min), # minimum
+  Med = apply(data, 2, median), # median
+  Mean = apply(data, 2, mean), # mean
+  SD = apply(data, 2, sd), # Standard deviation
+  Max = apply(data, 2, max) # Maximum
+  ))
+}
+desc_stats <- desc_stats(data1)
+head(desc_stats)
+```
+
+## b)
+
+```{r}
+# Visual
+plot(data1$V1, data1$V2, main = "Scatter Plot", xlab = "X1", ylab = "X2")
+```
+
+Given the characteristics of the two-variable dataset, Euclidean distance is the more appropriate metric for cluster analysis. Many high-density areas are circular, aligning with Euclidean distance's assumption of equal importance in all directions. While some clusters show trends (upward, downward, or flat), suggesting variable correlation, these patterns are limited and not dominant. Manhattan distance, which sums absolute differences along the axis, can distort proximity in circular clusters. Additionally, with some points lying ambiguously between dense areas, Euclidean distance better preserves geometric continuity and captures subtle positional differences. Overall, it provides a more natural separation of both round and moderately elongated clusters.
+
+## c)
+
+```{r}
+#| warning: false
+library(ggplot2)
+
+# Observing the Univariate Distribution of the data
+ggplot(data1, aes(x=V1)) +
+  geom_histogram(fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of V1", x = "V1", y = "Frequency")
+
+ggplot(data1, aes(x=V2)) +
+  geom_histogram(fill = "red", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of V2", x = "V2", y = "Frequency")
+
+# Observing the Bivariate Distributions of the data
+pairs(data1)
+```
+
+Different distribution shapes can significantly affect the mean, particularly when distributions are skewed or contain extreme values. Skewed distributions pull the mean toward the longer tail, making it less representative of the central tendency compared to the median. In clustering, this is important because algorithms like k-means rely on the mean to define cluster centroids, which can be distorted by non-normal or irregular distributions.
+
+For univariate distributions, Variable 1 shows high density in the middle with sharp fluctuations between adjacent bins and steep tails, suggesting local modes and potential subclusters. The sudden drop in lower values and gradual decline in higher values indicate a right-skewed distribution, which may pull the mean rightward and affect centroid placement. In contrast, Variable 2's histogram is more symmetric, with a flat high-density center and gradual tailing off, though one bin on the left is notably high, potentially representing a small subgroup or local cluster. These features suggest Variable 2 may contribute more evenly to clustering, while Variable 1 could create sensitivity to outliers and local density shifts.
+
+The bivariate distribution, as seen in the pair plot, displays several high-density areas on the sides and center, which is favorable for clustering since clusters often form in dense regions. However, points lying between these clusters introduce ambiguity, potentially complicating cluster boundaries. The presence of trends (upward, downward, or flat) in side densities suggests some correlation, which may guide elongated cluster shapes, while the circular middle clusters align with the assumptions of Euclidean distance. Isolated points far from dense areas or equally distant from multiple clusters could act as outliers or ambiguous points, potentially skewing centroids and reducing cluster quality. Overall, the shape and spread of the distributions are critical, as they influence how clearly and accurately clusters can be identified.
+
+## d)
+
+```{r}
+#| warning: false
+library(ggplot2)
+# Takes to long
+# dist_mat <- matrix(NA, nrow=nrow(data1), ncol = nrow(data1))
+# for(i in 1:nrow(data1)){
+#    for(j in 1:nrow(data1)){
+#     dist_mat[i,j] <- sqrt(sum((data1[i,] - data1[j,])^2)) 
+#    }
+# }
+
+dist_mat <- as.data.frame(dist(data1, method = "euclidean"))
+head(dist_mat)
+ggplot(dist_mat, aes(x=x)) +
+  geom_histogram(fill = "purple", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Pairwise Euclidean Distances", x = "Euclidean Distances", y = "Frequency")
+
+# save(dist_mat, file = "R Data/Distance Matrix.RData" )
+```
+
+The distribution of pairwise Euclidean distances shows important characteristics that influence clustering. The left tail increases sharply, indicating many short distances between nearby points, this suggests local density and potential tight clusters. The plateau in the middle represents a range of moderate distances with relatively constant frequency, implying a spread of moderately spaced points, possibly forming looser or overlapping clusters. The gradual decline in the right tail shows that long distances are less frequent but still present, likely corresponding to points in different clusters or outliers.
+
+This shape suggests that the dataset contains a mix of tightly packed points and more spread-out ones, which is typical in datasets with clusters of varying compactness. For clustering, especially using distance-based methods like k-means or hierarchical clustering, this distribution is significant: the algorithm must distinguish between meaningful short distances within clusters and longer distances between clusters. The plateau may indicate ambiguity in cluster boundaries, while the long right tail highlights the importance of handling outliers, as they can skew distance calculations and centroid positions. Overall, the shape supports the presence of clustered structure but also points to potential challenges with cluster separation and outlier sensitivity.
+
+## e)
+
+```{r}
+# Boxplot
+boxplot(data1$V1, main = "Boxplot of X1")
+boxplot(data1$V2, main = "Boxplot of X2")
+
+# Inter Quantile Range Method
+iqr_outliers <- function(v) {
+  Q1 <- quantile(v, 0.25)
+  Q3 <- quantile(v, 0.75)
+  IQR_val <- IQR(v)
+  which(v < (Q1 - 1.5 * IQR_val) | v > (Q3 + 1.5 * IQR_val))
+}
+iqr_outliers(data1$V1) 
+iqr_outliers(data1$V2) 
+
+# Z Score Method
+z_x1 <- scale(data1$V1)
+z_x2 <- scale(data1$V2)
+which(abs(z_x1) > 3)
+which(abs(z_x2) > 3)
+
+# Mahalanobis Distance
+md <- mahalanobis(data1, colMeans(data1), cov(data1))
+outliers <- which(md > qchisq(0.975, df = 2))
+data2 <- data1[-outliers, ]
+
+# Results
+paste0("No. of outliers removed: ", length(outliers))
+apply(data2, 2, quantile, probs = c(0.25, 0.5, 0.75))
+# plot(data2$V1, data2$V2, main = "Scatter Plot Removed Outliers", xlab = "X1", ylab = "X2")
+pairs(data2)
+```
+
+The Mahalanobis distance detects outliers in a two-dimensional dataset by measuring how far each observation is from the mean, taking into account the correlation between the variables. Unlike Euclidean distance, it scales the data based on the covariance structure, identifying points that deviate significantly from the overall distribution. Observations with distances exceeding a chi-squared threshold are flagged as multivariate outliers.
+
+Removing such outliers is important for cluster analysis because they can distort cluster centroids, inflate within-cluster variance, and lead to the formation of artificial or misleading clusters. By excluding outliers, the clustering algorithm can more accurately capture the true structure and grouping patterns in the data.
+
+## f)
+
+```{r}
+cor(data1)
+```
+
+The correlation matrix shows a very low correlation (0.069) between variables V1 and V2, indicating that they are nearly uncorrelated. Since clustering methods like k-means or hierarchical clustering assume equal weight among dimensions, and the variables are not strongly correlated, no adjustment (e.g., dimensionality reduction or decorrelation) is necessary. A standard clustering algorithm can be applied directly without concern for redundancy or multicollinearity. Thus, the data appears suitable for clustering in its current form.
+
+## g)
+
+```{r}
+
+```
