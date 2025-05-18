@@ -39,7 +39,7 @@ stopCluster(cl)
 
 # Plot the average silhouette width
 df1 <- data.frame (x = 2:k_max, y = silhouette_scores_mean[2:20])
-ggplot(df1, aes(x=x, y=y)) +
+sp1 <- ggplot(df1, aes(x=x, y=y)) +
   geom_point(color = "red", shape = 19, size = 3) +  
   geom_line(color = "black", linewidth = 1) +        
   geom_vline(xintercept = which.max(silhouette_scores), 
@@ -57,7 +57,9 @@ ggplot(df1, aes(x=x, y=y)) +
     plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
     panel.grid.minor = element_blank()                    
   )
+sp1
 
+# ggsave(sp1, filename = "Plots/Question 2a Average Silhouette Scores for K-Means Clustering.png")
 # save(silhouette_scores_mean, file = "R Data/Silhouette Scores K-Means.RData" )
 ```
 
@@ -91,7 +93,7 @@ silhouette_scores_medoid[2:pam_max] <- foreach(
 stopCluster(cl)
 
 df2 <- data.frame (x = 2:pam_max, y = silhouette_scores_medoid[2:20])
-ggplot(df2, aes(x=x, y=y)) +
+sp2 <- ggplot(df2, aes(x=x, y=y)) +
   geom_point(color = "green", shape = 19, size = 3) +  
   geom_line(color = "black", linewidth = 1) +        
   geom_vline(xintercept = which.max(silhouette_scores), 
@@ -109,7 +111,9 @@ ggplot(df2, aes(x=x, y=y)) +
     plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
     panel.grid.minor = element_blank()                    
   )
+sp2
 
+# ggsave(sp2, filename = "Plots/Question 2a Average Silhouette Scores for K-Mediods Clustering.png")
 # save(silhouette_scores_medoid, file = "R Data/Silhouette Scores K-Medoids.RData" )
 ```
 

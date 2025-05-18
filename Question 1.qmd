@@ -51,16 +51,43 @@ Given the characteristics of the two-variable dataset, Euclidean distance is the
 library(ggplot2)
 
 # Observing the Univariate Distribution of the data
-ggplot(data1, aes(x=V1)) +
+ph1 <- ggplot(data1, aes(x=V1)) +
   geom_histogram(fill = "blue", color = "black", alpha = 0.7) +
-  labs(title = "Histogram of V1", x = "V1", y = "Frequency")
+  labs(title = "Histogram of V1", x = "V1", y = "Frequency") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),                  
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+ph1
+# ggsave(ph1, filename = "Plots/Question 1c Histogram X1.png")
 
-ggplot(data1, aes(x=V2)) +
+ph2 <- ggplot(data1, aes(x=V2)) +
   geom_histogram(fill = "red", color = "black", alpha = 0.7) +
-  labs(title = "Histogram of V2", x = "V2", y = "Frequency")
+  labs(title = "Histogram of V2", x = "V2", y = "Frequency")+
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),                  
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+ph2
+# ggsave(ph2, filename = "Plots/Question 1c Histogram X2.png")
 
 # Observing the Bivariate Distributions of the data
-pairs(data1)
+# png("Plots/Question 1c Pair Plot.png", width = 1000, height = 1000, res = 150)  
+pairs(data1, 
+      main = "Bivariate Distributions of Data",  
+      pch = 19, col = "black",                  
+      cex = 0.8, gap = 0.5)                     
+# dev.off()
 ```
 
 Different distribution shapes can significantly affect the mean, particularly when distributions are skewed or contain extreme values. Skewed distributions pull the mean toward the longer tail, making it less representative of the central tendency compared to the median. In clustering, this is important because algorithms like k-means rely on the mean to define cluster centroids, which can be distorted by non-normal or irregular distributions.
@@ -84,10 +111,21 @@ library(ggplot2)
 
 dist_mat <- as.data.frame(dist(data1, method = "euclidean"))
 head(dist_mat)
-ggplot(dist_mat, aes(x=x)) +
+ph3 <- ggplot(dist_mat, aes(x=x)) +
   geom_histogram(fill = "purple", color = "black", alpha = 0.7) +
-  labs(title = "Distribution of Pairwise Euclidean Distances", x = "Euclidean Distances", y = "Frequency")
+  labs(title = "Distribution of Pairwise Euclidean Distances", x = "Euclidean Distances", y = "Frequency")+
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),                  
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+ph3
 
+# ggsave(ph3, filename = "Plots/Question 1d Distribution of Pairwise Euclidean Distances.png")
 # save(dist_mat, file = "R Data/Distance Matrix.RData" )
 ```
 

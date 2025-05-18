@@ -1,1 +1,55 @@
 # Question 3 (Cluster Analysis)
+
+## a)
+
+```{r}
+cluster_scatter_plot <- function(clusters, plot_title, plot_number){
+  cluster_data <- data.frame(
+  x = data2[, 1],  
+  y = data2[, 2],  
+  cluster = as.factor(clusters)
+  )
+  
+  cp <- ggplot(cluster_data, aes(x = x, y = y, color = cluster)) +
+    geom_point(size = 1, alpha = 0.7) +
+    scale_color_viridis_d(option = "C") +  
+    labs(
+      title = plot_title,
+      x = "Variable 1",
+      y = "Variable 2",
+      color = "Cluster"
+    ) +        
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 17.5, face = "bold"),  
+      axis.title.x = element_text(size = 14),               
+      axis.title.y = element_text(size = 14),               
+      axis.text = element_text(size = 10),                  
+      plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+      panel.grid.minor = element_blank()                    
+    )
+  
+  ggsave(cp, filename = paste0("Plots/Question 3a K-Means Scatter Plot ", plot_number,".png"))
+  return(cp)
+}
+```
+
+```{r}
+set.seed(123)
+
+# Cluster Plot 1 
+km_result <- kmeans(data2, centers = 15, nstart = 10) 
+cluster_scatter_plot(km_result$cluster, "K-Means Clustering (k=15)", 1)
+
+# Cluster Plot 2
+km_result <- kmeans(data2, centers = 16, nstart = 10) 
+cluster_scatter_plot(km_result$cluster, "K-Means Clustering (k=16)", 2)
+
+# Cluster Plot 3
+pam_result <- pam(data2, k = 15) 
+cluster_scatter_plot(pam_result$cluster, "K-Medoids Clustering (k=15)", 3)
+
+# Cluster Plot 4
+pam_result <- pam(data2, k = 16) 
+cluster_scatter_plot(pam_result$cluster, "K-Medoids Clustering (k=16)", 4)
+```
