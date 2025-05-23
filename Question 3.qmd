@@ -3,10 +3,10 @@
 ## a)
 
 ```{r}
-cluster_scatter_plot <- function(clusters, centers, plot_title, plot_number){
+cluster_scatter_plot <- function(clusters, centers, plot_title, plot_number, data, outliers = NULL, neg_obs = NULL){
   cluster_data <- data.frame(
-    x = data2[, 1],  
-    y = data2[, 2],  
+    x = data[, 1],  
+    y = data[, 2],  
     cluster = as.factor(clusters)
   )
   
@@ -29,7 +29,7 @@ cluster_scatter_plot <- function(clusters, centers, plot_title, plot_number){
     ) +        
     theme_minimal() +
     theme(
-      plot.title = element_text(size = 17.5, face = "bold"),  
+      plot.title = element_text(size = 17, face = "bold"),  
       axis.title.x = element_text(size = 14),               
       axis.title.y = element_text(size = 14),               
       axis.text = element_text(size = 10),                  
@@ -37,27 +37,119 @@ cluster_scatter_plot <- function(clusters, centers, plot_title, plot_number){
       panel.grid.minor = element_blank()                    
     )
   
-  ggsave(cp, filename = paste0("Plots/Question 3a K-Means Scatter Plot ", plot_number,".png"))
+  if (!is.null(outliers)) {
+    cp <- cp + 
+      geom_point(data = cluster_data[outliers, ], 
+                 aes(x = x, y = y), 
+                 color = "deeppink", size = 2.5, shape = 8)
+  }
+  
+  if (!is.null(neg_obs)) {
+    cp <- cp + 
+      geom_point(data = cluster_data[neg_obs, ], 
+                 aes(x = x, y = y), 
+                 color = "orange", size = 3, shape = 8)
+  }
+  
+  ggsave(cp, filename = paste0("Plots/Question 3 ", plot_title," plot ", plot_number,".png"), width = 6, height = 5, dpi = 300)
   return(cp)
 }
 ```
 
 ```{r}
+library(ggplot2)
+library(cluster)
 set.seed(123)
 
+sils <- c()
+
 # Cluster Plot 1 
-km_result <- kmeans(data2, centers = 15, nstart = 10) 
-cluster_scatter_plot(km_result$cluster, km_result$centers, "K-Means Clustering (k=15)", 1)
+km_result1 <- kmeans(data1, centers = 15, nstart = 10) 
+cluster_scatter_plot(km_result1$cluster, km_result1$centers, "K-Means Clustering (k=15)", 1, data1)
+sil1 <- silhouette(km_result1$cluster, dist(data1))
+sils[1] <- mean(sil1[, 3])
+plot(sil1, border = NA, col = 2:16,
+     main = "K-means Silhouette Plot K=15")
+abline(v = sils[1], col = "red", lty = 2, lwd = 2)
+text(x = sils[1], y = 0, 
+     labels = paste0("Avg = ", round(sils[1], 3)),
+     pos = 4, col = "red")
 
 # Cluster Plot 2
-km_result <- kmeans(data2, centers = 16, nstart = 10) 
-cluster_scatter_plot(km_result$cluster,  km_result$centers, "K-Means Clustering (k=16)", 2)
+km_result2 <- kmeans(data1, centers = 16, nstart = 10) 
+cluster_scatter_plot(km_result2$cluster,  km_result2$centers, "K-Means Clustering (k=16)", 2, data1)
+sil2 <- silhouette(km_result2$cluster, dist(data1))
+sils[2] <- mean(sil2[, 3]) 
+plot(sil2, border = NA, col = 2:17,
+     main = "K-means Silhouette Plot K=16")
+abline(v = sils[2], col = "red", lty = 2, lwd = 2)
+text(x = sils[2], y = 0, 
+     labels = paste0("Avg = ", round(sils[2], 3)),
+     pos = 4, col = "red")
 
 # Cluster Plot 3
-pam_result <- pam(data2, k = 15) 
-cluster_scatter_plot(pam_result$cluster, pam_result$centers, "K-Medoids Clustering (k=15)", 3)
+pam_result1 <- pam(data1, k = 15, variant ="f_5") 
+cluster_scatter_plot(pam_result1$cluster, pam_result1$medoids, "K-Medoids Clustering (k=15)", 3, data1)
+clarax1 <- clara(data, 15, samples=5, sampsize = 5000)
+sil3 <- silhouette(clarax1)
+sils[3] <- mean(sil3[, 3]) 
+plot(sil3, border =NA, col = 2:16, main = paste0("K-mediods Silhouette Plot K=15"))
+abline(v = sils[3], col = "red", lty = 2, lwd = 2)
+text(x = sils[3], y = 0, 
+     labels = paste0("Avg = ", round(sils[3], 3)),
+     pos = 4, col = "red")
 
 # Cluster Plot 4
-pam_result <- pam(data2, k = 16) 
-cluster_scatter_plot(pam_result$cluster, pam_result$centers,"K-Medoids Clustering (k=16)", 4)
+pam_result2 <- pam(data1, k = 16, variant ="f_5") 
+cluster_scatter_plot(pam_result2$cluster, pam_result2$medoids,"K-Medoids Clustering (k=16)", 4, data1)
+clarax2 <- clara(data, 16, samples=5, sampsize = 5000)
+sil4 <- silhouette(clarax2)
+sils[4] <- mean(sil4[, 3])
+plot(sil4, border =NA,col = 2:17, main = paste0("K-mediods Silhouette Plot K=16"))
+abline(v = sils[4], col = "red", lty = 2, lwd = 2)
+text(x = sils[4], y = 0, 
+     labels = paste0("Avg = ", round(sils[4], 3)),
+     pos = 4, col = "red")
+
+sils
+```
+
+## b)
+
+```{r}
+# 1. Plotting out all the outliers in the cluster
+set.seed(123)
+initial_centers <- data1[sample(nrow(data1), 15), ]
+km_result_dirty <- kmeans(data1, centers = initial_centers, nstart = 1)
+cluster_scatter_plot(km_result_dirty$cluster, km_result_dirty$centers, "K-Means Clustering (k=15) Outliers",5 , data1, outliers = union(outliers1, outliers2))
+
+# 2. Cluster plot without the outliers
+km_result_clean <- kmeans(data2, centers = initial_centers, nstart = 1)
+cluster_scatter_plot(km_result_clean$cluster, km_result_clean$centers, "K-Means Clustering (k=15) No Outliers", 6, data2)
+```
+
+## c)
+
+```{r}
+# 1. Identifying the negative scores and plotting them out
+sil_neg <- silhouette(km_result1$cluster, dist(data1))
+neg_sil_indices <- which(sil_neg[, 3] < 0)
+cluster_scatter_plot(km_result1$cluster, km_result1$centers, "K-Means Clustering (k=15) Negative Scores",7, data1, neg_obs = neg_sil_indices)
+
+# 2. Finding all the reassignments and showing the first 5 for the report (filtered negative scores)
+fn_indices <-  neg_sil_indices[seq(1, length(neg_sil_indices), 7)]
+cluster <- sil_neg[fn_indices,1]
+neighbor <- sil_neg[fn_indices,2]
+sil_neg_obs <- sil_neg[fn_indices, 3] 
+df_neg <- data.frame(Observation = fn_indices, "Assigned Cluster" = cluster, "Nearest Neighbour" = neighbor, "Silhouette Score" = round(sil_neg_obs,3))
+kable(df_neg)
+
+# 3. Removing the negative scores and seeing if the cluser plot changed
+neighbor_clusters <- sil_neg[neg_sil_indices, "neighbor"]
+new_clusters <- km_result1$cluster
+new_clusters[neg_sil_indices] <- neighbor_clusters
+new_sil <- silhouette(new_clusters, dist(data1))
+mean(new_sil[, "sil_width"])
+cluster_scatter_plot(new_clusters, km_result1$centers, "K-Means (k=15) After  Reassignment", 8, data1, neg_obs = which(new_sil[, "sil_width"] < 0))
+
 ```

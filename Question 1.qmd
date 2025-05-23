@@ -136,9 +136,10 @@ This shape suggests that the dataset contains a mix of tightly packed points and
 ## e)
 
 ```{r}
+library(knitr)
 # Boxplot
-boxplot(data1$V1, main = "Boxplot of X1")
-boxplot(data1$V2, main = "Boxplot of X2")
+boxplot(list(X1 = data1$V1, X2 = data1$V2),
+        main = "Boxplots of X1 and X2")
 
 # Inter Quantile Range Method
 iqr_outliers <- function(v) {
@@ -158,14 +159,21 @@ which(abs(z_x2) > 3)
 
 # Mahalanobis Distance
 md <- mahalanobis(data1, colMeans(data1), cov(data1))
-outliers <- which(md > qchisq(0.975, df = 2))
-data2 <- data1[-outliers, ]
+outliers1 <- which(md > qchisq(0.975, df = 2 ))
+outliers_df <- data.frame(Index = outliers1, V1 = data1$V1[outliers1], V2 = data1$V2[outliers1])
+kable(outliers_df, caption = "Outliers Mahalanobis")
+
+# Euclidean Distance
+centroid <- colMeans(data1)
+euclidean_dist <- apply(data1, 1, function(row) sqrt(sum((row - centroid)^2)))
+threshold <- quantile(euclidean_dist, 0.98)
+outliers2 <- which(euclidean_dist > threshold)
+outliers_df <- data.frame(Index = outliers2, V1 = data1$V1[outliers2], V2 = data1$V2[outliers2])
+kable(outliers_df, caption = "Outliers Euclidean")
 
 # Results
-paste0("No. of outliers removed: ", length(outliers))
-apply(data2, 2, quantile, probs = c(0.25, 0.5, 0.75))
-# plot(data2$V1, data2$V2, main = "Scatter Plot Removed Outliers", xlab = "X1", ylab = "X2")
-pairs(data2)
+data2 <- data1[-union(outliers1, outliers2), ]
+paste0("No. of outliers removed: ", length(union(outliers1, outliers2)))
 ```
 
 The Mahalanobis distance detects outliers in a two-dimensional dataset by measuring how far each observation is from the mean, taking into account the correlation between the variables. Unlike Euclidean distance, it scales the data based on the covariance structure, identifying points that deviate significantly from the overall distribution. Observations with distances exceeding a chi-squared threshold are flagged as multivariate outliers.
@@ -182,6 +190,4 @@ The correlation matrix shows a very low correlation (0.069) between variables V1
 
 ## g)
 
-```{r}
-
-```
+We aren't going to standardize our data because we want to maintain interpretability of our data and they are arguably on the same scales

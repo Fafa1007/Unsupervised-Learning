@@ -29,8 +29,8 @@ silhouette_scores_mean[2:k_max] <- foreach(
   .combine = "c", 
   .packages = c("cluster")
 ) %dopar% {
-  km_result <- kmeans(data2, centers = i, nstart = 1000) 
-  ss <- silhouette(km_result$cluster, dist(data2))
+  km_result <- kmeans(data1, centers = i, nstart = 1000) 
+  ss <- silhouette(km_result$cluster, dist(data1))
   mean(ss[, 3])  
 }
 
@@ -42,7 +42,7 @@ df1 <- data.frame (x = 2:k_max, y = silhouette_scores_mean[2:20])
 sp1 <- ggplot(df1, aes(x=x, y=y)) +
   geom_point(color = "red", shape = 19, size = 3) +  
   geom_line(color = "black", linewidth = 1) +        
-  geom_vline(xintercept = which.max(silhouette_scores), 
+  geom_vline(xintercept = which.max(silhouette_scores_mean), 
              color = "blue", linetype = "dashed", linewidth = 1) +
   labs(title = "Average Silhouette Scores for K-Means Clustering",
        x = "Number of Clusters (k)",
@@ -84,8 +84,8 @@ silhouette_scores_medoid[2:pam_max] <- foreach(
   .combine = "c", 
   .packages = c("cluster")
 ) %dopar% {
-  pam_result <- pam(data2, k = i)  
-  ss <- silhouette(pam_result$clustering, dist(data2))
+  pam_result <- pam(data1, k = i, variant ="f_5", nstart = 10)  
+  ss <- silhouette(pam_result$clustering, dist(data1))
   mean(ss[, 3])  
 }
 
@@ -96,7 +96,7 @@ df2 <- data.frame (x = 2:pam_max, y = silhouette_scores_medoid[2:20])
 sp2 <- ggplot(df2, aes(x=x, y=y)) +
   geom_point(color = "green", shape = 19, size = 3) +  
   geom_line(color = "black", linewidth = 1) +        
-  geom_vline(xintercept = which.max(silhouette_scores), 
+  geom_vline(xintercept = which.max(silhouette_scores_medoid), 
              color = "blue", linetype = "dashed", linewidth = 1) +
   labs(title = "Average Silhouette Scores for K-Mediods Clustering",
        x = "Number of Clusters (k)",
@@ -117,46 +117,49 @@ sp2
 # save(silhouette_scores_medoid, file = "R Data/Silhouette Scores K-Medoids.RData" )
 ```
 
-## b) 
+## b)
 
 ```{r}
-sensitivity_func1 <- function(max_iter, no_kmeans){
+sens_func <- function(Kmeans, Kmedoids, max_iter, k, plot_title, data){
   sensitivity_results <- c()
-  no_iter <- 1
-  while(no_iter < max_iter){
-    km_result <- kmeans(data2, centers = no_kmeans, nstart = 10) 
-    ss <- silhouette(km_result$cluster, dist(data2))
-    sensitivity_results[no_iter] <- mean(ss[, 3]) 
-    no_iter <- no_iter +1
+  no_iter <- 0
+  if(Kmeans == TRUE){
+    while(no_iter < max_iter+1){
+      km_result <- kmeans(data, centers = k, nstart = 10) 
+      ss <- silhouette(km_result$cluster, dist(data))
+      sensitivity_results[no_iter] <- mean(ss[, 3])
+      no_iter <- no_iter +1
+    }
   }
-  return(sensitivity_results)
-}
-
-sensitivity_func2 <- function(max_iter, no_kmediods){
-  sensitivity_results <- c()
-  no_iter <- 1
-  while(no_iter < max_iter){
-    pam_result <- pam(data2, k = no_kmediods) 
-    ss <- silhouette(pam_result$cluster, dist(data2))
+  
+  if(Kmedoids == TRUE){
+    while(no_iter < max_iter+1){
+    pam_result <- pam(data, k = k, variant = "f_5") 
+    ss <- silhouette(pam_result$cluster, dist(data))
     sensitivity_results[no_iter] <- mean(ss[, 3])  
     no_iter <- no_iter +1
+    }
   }
-  return(sensitivity_results)
+  sensitivity_results <- scale(sensitivity_results)
+  sensitivity_results[is.nan(sensitivity_results)] <- 0
+  
+  df <- data.frame(x=1:max_iter, y = sensitivity_results, group = plot_title)
+  return(df)
 }
+  
 
-sensitivity_plot_func <- function(sensitivity_results, plot_title, plot_no){
-  df <- data.frame(x =1:length(sensitivity_results), y = sensitivity_results)
-  sp <- ggplot(data = df, aes(x=x, y=y)) +
-    geom_point(color = "red", size = 1.5, shape = 19)+
-    geom_line(color = "black", linewidth = 0.5) +
+sensitivity_plot_func <- function(sensitivity_results){
+  sp <- ggplot(sensitivity_results, aes(x=x, y=y, color = group)) +
+    geom_point( size = 1.5, shape = 19)+
+    geom_line( linewidth = 0.5) +
     labs(
-      title = paste0("Sensitivity Analysis of ", plot_title), 
-      xlab = "Number of Clusters",
-      ylab = "Average Silhouette Score"
+      title = paste0("Scaled Average Silhouette Scores To\nVisualize Sensitivity"), 
+      x = "Iteration Number x",
+      y = "Scaled Average Silhouette Score"
     ) +
     theme_minimal()+
     theme(
-      plot.title = element_text(size = 17.5, face = "bold"),  
+      plot.title = element_text(size = 17, face = "bold"),  
       axis.title.x = element_text(size = 14),               
       axis.title.y = element_text(size = 14),               
       axis.text = element_text(size = 10),         
@@ -164,41 +167,59 @@ sensitivity_plot_func <- function(sensitivity_results, plot_title, plot_no){
       panel.grid.minor = element_blank()                    
     )
   
-  ggsave(sp, filename = paste0("Plots/Question 2b Sensitivity Plot ", plot_no, ".png"))
+  #ggsave(sp, filename = paste0("Plots/Question 2b Sensitivity Plot.png"))
   return(sp)
+}
+
+summary_silhouette_stats <- function(df, group_col = "group", score_col = "y") {
+  df %>%
+    group_by(across(all_of(group_col))) %>%
+    summarise(
+      mean = mean(.data[[score_col]]),
+      sd = sd(.data[[score_col]]),
+      range = diff(range(.data[[score_col]])),
+      cv = ifelse(mean != 0, sd / mean, NA),
+      .groups = "drop"
+    ) %>%
+    pivot_longer(cols = -all_of(group_col), names_to = "statistic", values_to = "value") %>%
+    pivot_wider(names_from = all_of(group_col), values_from = value) %>%
+    as.data.frame()
 }
 ```
 
 ```{r}
-kmeans_sens1 <- sensitivity_func1(20, 15)
-sensitivity_plot_func(kmeans_sens1, plot_title = "K-Means (k=15)", 1)
+library(knitr)
+library(dplyr)
+library(tidyr)
+kmeans_sens1 <- sens_func(Kmeans = TRUE, Kmedoids = FALSE, 20, 15, "K-Means K=15", data1)
+kmeans_sens2 <- sens_func(Kmeans = TRUE, Kmedoids = FALSE, 20, 16,"K-Means K=16", data1)
+kmedoid_sens1 <- sens_func(Kmeans = FALSE, Kmedoids = TRUE, 20, 15,"K-Mediods K=15", data1)
+kmedoid_sens2 <- sens_func(Kmeans = FALSE, Kmedoids = TRUE, 20, 16, "K-Mediods K=16", data1)
 
-kmeans_sens2 <- sensitivity_func1(20, 16)
-sensitivity_plot_func(kmeans_sens2, plot_title = "K-Means (k=16)", 2)
+kmedoid_sens1$y <- kmedoid_sens1$y+0.05
+sens_results <- rbind(kmeans_sens1,kmeans_sens2, kmedoid_sens1, kmedoid_sens2)
+# save(sens_results, file = "R Data/Sensitivity Average Scaled Silhoutte Scores.RData" )
 
-kmediod_sens1 <- sensitivity_func2(20, 15)
-sensitivity_plot_func(kmediod_sens1, plot_title = "K-Mediods (k=15)", 1)
-
-kmediod_sens2 <- sensitivity_plot_func(20, 16)
-sensitivity_plot_func(kmediod_sens2, plot_title = "K-Mediods (k=16)", 2)
+sensitivity_plot_func(sens_results)
+summary_silhouette_stats(sens_results, group_col = "group", score_col= "y")
 ```
 
 ## d)
 
 ```{r}
 #| warning: false
-
-gap_plot <- function(results, plot_no){
-  gp <- ggplot(data = results, aes(x=1:20, y=gap)) +
+gap_plot <- function(results, plot_no, plot_title){
+  df <- data.frame(x = 1:nrow(results), y = results$gap)
+  gp <- ggplot(data = df, aes(x=x, y=y)) +
   geom_point(color = "red", size = 1.5, shape = 19)+
   geom_line(color = "black", linewidth = 0.5) +
-  geom_errorbar(aes(ymin = gap - SE.sim, 
-                 ymax = gap + SE.sim), 
+  geom_errorbar(aes(ymin = results$gap - results$SE.sim, 
+                 ymax = results$gap + results$SE.sim), 
               width = 0.2, color = "darkred") +
   labs(
-    title = "Gap Statistic calculated every number of category", 
-    xlab = "Number of Clusters",
-    ylab = "Gap Statistic"
+    title = paste0("Gap Statistic for ", plot_title), 
+    x = "Number of Clusters",
+    y = "Gap Statistic"
   ) +
   theme_minimal()+
   theme(
@@ -210,35 +231,19 @@ gap_plot <- function(results, plot_no){
     panel.grid.minor = element_blank()                    
   )
   
-  ggsave(gp, filename = paste0("Plots/Question 2d Gap Plot ", plot_no, ".png"))
+  # ggsave(gp, filename = paste0("Plots/Question 2d Gap Plot ", plot_no, ".png"))
   return(gp)  
-}
-
-
-# Finding Best K
-Best_k_func <- function(results){
-  Best_k <- c()
-  Best_gap <- c()
-  index <- 1
-  for(i in 1:(nrow(results)-1)){
-    if(results[i,3] >= (results[i+1,3] - results[i+1, 4])){
-      Best_k[index] <- i
-      Best_gap[index] <- results[i,3]
-    }
-  }
-  return(Best_k[which.min(Best_gap)])
 }
 ```
 
 ```{r}
-gap_stat <- clusGap(data2, FUN = kmeans, nstart = 25, K.max = 20, B = 10)
-results <- data.frame(gap_stat$Tab)
-gap_plot(results, 1)
-Best_k_func(results)
+gap_stat <- clusGap(data1, FUN = kmeans, nstart = 10, K.max = 20, B = 10)
+results1 <- data.frame(gap_stat$Tab)
+gap_plot(results1, 1, "K-Means")
 
 
-gap_stat <- clusGap(data2, FUN = pam, K.max = 20)
-results <- data.frame(gap_stat$Tab)
-gap_plot(results, 2)
-Best_k_func(results)
+gap_stat_pam <- clusGap(data, FUN = pam, K.max = 20, B = 1, variant= "f_5")
+results2 <- data.frame(gap_stat_pam$Tab)
+gap_plot(results2, 2, "K-Medoids")
+# save(gap_stat_pam, file = "R Data/Gap Statistics for K-mediods.RData" )
 ```
