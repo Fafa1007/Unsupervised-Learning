@@ -1,0 +1,543 @@
+# Question 1 (Exploratory Data Analysis)
+
+```{r}
+data <- read.table("STA4026_Assignment_Clustering.txt")
+```
+
+## a)
+
+```{r}
+data1 <- as.data.frame(data)
+
+# Remove missing values and replace them with 0
+data1 <- na.omit(data1)
+data1[is.na(data1)] <- 0
+
+# Remove duplicates
+data1 <- data1[!duplicated(data1), ]
+
+# Results
+paste0("No. of observations before cleaning: ", length(data1))
+
+# Descriptive Statistics
+desc_stats <- function(data){
+  return(data.frame(
+  Min = apply(data, 2, min), 
+  Q1 =  apply(data1, 2, quantile, probs = c(0.25)), 
+  Med = apply(data, 2, median),   
+  Mean = apply(data, 2, mean),
+  Q3 =  apply(data1, 2, quantile, probs = c(0.75)),
+  Max = apply(data, 2, max) 
+  ))
+}
+desc_stats <- desc_stats(data1)
+head(desc_stats)
+```
+
+## c)
+
+```{r}
+#| warning: false
+panel.hist <- function(x, ...) {
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(usr[1:2], 0, 1.5))
+  h <- hist(x, plot = FALSE)
+  breaks <- h$breaks; nB <- length(breaks)
+  y <- h$counts / max(h$counts)
+  rect(breaks[-nB], 0, breaks[-1], y, col = "gray", border = NA)
+}
+# png("Plots/Question 1c Pair Plot.png", width = 1000, height = 1000, res = 150)
+transparent_black <- rgb(0, 0, 0, alpha = 0.3)
+pairs(data1, 
+      main = "Bivariate Distributions of Data",  
+      pch = 19, col = transparent_black,                  
+      cex = 0.8, gap = 0.5,
+      diag.panel = panel.hist)                    
+# dev.off()
+```
+
+## d)
+
+```{r}
+#| warning: false
+library(ggplot2)
+
+dist_mat <- as.data.frame(dist(data1, method = "euclidean"))
+head(dist_mat)
+ph3 <- ggplot(dist_mat, aes(x=x)) +
+  geom_histogram(fill = "purple", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Pairwise Euclidean Distances", x = "Euclidean Distances", y = "Frequency")+
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),                  
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+ph3
+
+# ggsave(ph3, filename = "Plots/Question 1d Distribution of Pairwise Euclidean Distances.png")
+# save(dist_mat, file = "R Data/Distance Matrix.RData" )
+```
+
+## e)
+
+```{r}
+library(knitr)
+# Boxplot
+boxplot(list(X1 = data1$V1, X2 = data1$V2),
+        main = "Boxplots of X1 and X2")
+
+# Inter Quantile Range Method
+iqr_outliers <- function(v) {
+  Q1 <- quantile(v, 0.25)
+  Q3 <- quantile(v, 0.75)
+  IQR_val <- IQR(v)
+  which(v < (Q1 - 1.5 * IQR_val) | v > (Q3 + 1.5 * IQR_val))
+}
+iqr_outliers(data1$V1) 
+iqr_outliers(data1$V2) 
+
+# Z Score Method
+z_x1 <- scale(data1$V1)
+z_x2 <- scale(data1$V2)
+which(abs(z_x1) > 3)
+which(abs(z_x2) > 3)
+
+# Mahalanobis Distance
+md <- mahalanobis(data1, colMeans(data1), cov(data1))
+outliers1 <- which(md > qchisq(0.975, df = 2 ))
+outliers_df <- data.frame(Index = outliers1, V1 = data1$V1[outliers1], V2 = data1$V2[outliers1])
+kable(outliers_df, caption = "Outliers Mahalanobis")
+
+# Euclidean Distance
+centroid <- colMeans(data1)
+euclidean_dist <- apply(data1, 1, function(row) sqrt(sum((row - centroid)^2)))
+threshold <- quantile(euclidean_dist, 0.98)
+outliers2 <- which(euclidean_dist > threshold)
+outliers_df <- data.frame(Index = outliers2, V1 = data1$V1[outliers2], V2 = data1$V2[outliers2])
+kable(outliers_df, caption = "Outliers Euclidean")
+
+# Results
+intersecting_outliers <- intersect(outliers1, outliers2)
+data2 <- data1[-union(outliers1, outliers2), ]
+paste0("No. of outliers removed: ", length(union(outliers1, outliers2)))
+```
+
+## f)
+
+```{r}
+cor(data1)
+```
+
+------------------------------------------------------------------------
+
+# Question 2 (Hyper-Parameter Tuning)
+
+```{r}
+library(cluster)
+library(NbClust)
+library(fpc)
+```
+
+## a) Average Silhouette Plots
+
+```{r}
+library(foreach)
+library(doParallel)
+library(cluster)
+
+set.seed(123)
+
+# Set up parallel backend
+n_cores <- parallel::detectCores() - 1 
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+k_max <- 20
+silhouette_scores_mean <- numeric(k_max)
+
+# Parallel loop
+silhouette_scores_mean[2:k_max] <- foreach(
+  i = 2:k_max, 
+  .combine = "c", 
+  .packages = c("cluster")
+) %dopar% {
+  km_result <- kmeans(data1, centers = i, nstart = 1000) 
+  ss <- silhouette(km_result$cluster, dist(data1))
+  mean(ss[, 3])  
+}
+
+# Stop parallel cluster
+stopCluster(cl)
+
+# Plot the average silhouette width
+df1 <- data.frame (x = 2:k_max, y = silhouette_scores_mean[2:20])
+sp1 <- ggplot(df1, aes(x=x, y=y)) +
+  geom_point(color = "red", shape = 19, size = 3) +  
+  geom_line(color = "black", linewidth = 1) +        
+  geom_vline(xintercept = which.max(silhouette_scores_mean), 
+             color = "blue", linetype = "dashed", linewidth = 1) +
+  labs(title = "Average Silhouette Scores for K-Means Clustering",
+       x = "Number of Clusters (k)",
+       y = "Average Silhouette Width") +
+  scale_x_continuous(breaks = 2:k_max) +            
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),                  
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+sp1
+
+# ggsave(sp1, filename = "Plots/Question 2a Average Silhouette Scores for K-Means Clustering.png")
+# save(silhouette_scores_mean, file = "R Data/Silhouette Scores K-Means.RData" )
+```
+
+```{r}
+library(foreach)
+library(doParallel)
+library(cluster)  
+
+set.seed(123)
+
+# Parallel Set-Up
+n_cores <- parallel::detectCores() - 1  
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+pam_max <- 20
+silhouette_scores_medoid <- numeric(pam_max)
+
+# Parallel loop 
+silhouette_scores_medoid[2:pam_max] <- foreach(
+  i = 2:pam_max, 
+  .combine = "c", 
+  .packages = c("cluster")
+) %dopar% {
+  pam_result <- pam(data1, k = i, variant ="f_5", nstart = 10)  
+  ss <- silhouette(pam_result$clustering, dist(data1))
+  mean(ss[, 3])  
+}
+
+# Stop parallel cluster
+stopCluster(cl)
+
+df2 <- data.frame (x = 2:pam_max, y = silhouette_scores_medoid[2:20])
+sp2 <- ggplot(df2, aes(x=x, y=y)) +
+  geom_point(color = "green", shape = 19, size = 3) +  
+  geom_line(color = "black", linewidth = 1) +        
+  geom_vline(xintercept = which.max(silhouette_scores_medoid), 
+             color = "blue", linetype = "dashed", linewidth = 1) +
+  labs(title = "Average Silhouette Scores for K-Mediods Clustering",
+       x = "Number of Clusters (k)",
+       y = "Average Silhouette Width") +
+  scale_x_continuous(breaks = 2:k_max) +            
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),         
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+sp2
+
+# ggsave(sp2, filename = "Plots/Question 2a Average Silhouette Scores for K-Mediods Clustering.png")
+# save(silhouette_scores_medoid, file = "R Data/Silhouette Scores K-Medoids.RData" )
+```
+
+## b)
+
+```{r}
+sens_func <- function(Kmeans, Kmedoids, max_iter, k, plot_title, data){
+  sensitivity_results <- c()
+  no_iter <- 0
+  if(Kmeans == TRUE){
+    while(no_iter < max_iter+1){
+      km_result <- kmeans(data, centers = k, nstart = 10) 
+      ss <- silhouette(km_result$cluster, dist(data))
+      sensitivity_results[no_iter] <- mean(ss[, 3])
+      no_iter <- no_iter +1
+    }
+  }
+  
+  if(Kmedoids == TRUE){
+    while(no_iter < max_iter+1){
+    pam_result <- pam(data, k = k, variant = "f_5") 
+    ss <- silhouette(pam_result$cluster, dist(data))
+    sensitivity_results[no_iter] <- mean(ss[, 3])  
+    no_iter <- no_iter +1
+    }
+  }
+  sensitivity_results <- scale(sensitivity_results)
+  sensitivity_results[is.nan(sensitivity_results)] <- 0
+  
+  df <- data.frame(x=1:max_iter, y = sensitivity_results, group = plot_title)
+  return(df)
+}
+  
+
+sensitivity_plot_func <- function(sensitivity_results){
+  sp <- ggplot(sensitivity_results, aes(x=x, y=y, color = group)) +
+    geom_point( size = 1.5, shape = 19)+
+    geom_line( linewidth = 0.5) +
+    labs(
+      title = paste0("Scaled Average Silhouette Scores To\nVisualize Sensitivity"), 
+      x = "Iteration Number x",
+      y = "Scaled Average Silhouette Score"
+    ) +
+    theme_minimal()+
+    theme(
+      plot.title = element_text(size = 17, face = "bold"),  
+      axis.title.x = element_text(size = 14),               
+      axis.title.y = element_text(size = 14),               
+      axis.text = element_text(size = 10),         
+      plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+      panel.grid.minor = element_blank()                    
+    )
+  
+  #ggsave(sp, filename = paste0("Plots/Question 2b Sensitivity Plot.png"))
+  return(sp)
+}
+
+summary_silhouette_stats <- function(df, group_col = "group", score_col = "y") {
+  df %>%
+    group_by(across(all_of(group_col))) %>%
+    summarise(
+      mean = mean(.data[[score_col]]),
+      sd = sd(.data[[score_col]]),
+      range = diff(range(.data[[score_col]])),
+      cv = ifelse(mean != 0, sd / mean, NA),
+      .groups = "drop"
+    ) %>%
+    pivot_longer(cols = -all_of(group_col), names_to = "statistic", values_to = "value") %>%
+    pivot_wider(names_from = all_of(group_col), values_from = value) %>%
+    as.data.frame()
+}
+```
+
+```{r}
+library(knitr)
+library(dplyr)
+library(tidyr)
+kmeans_sens1 <- sens_func(Kmeans = TRUE, Kmedoids = FALSE, 20, 15, "K-Means K=15", data1)
+kmeans_sens2 <- sens_func(Kmeans = TRUE, Kmedoids = FALSE, 20, 16,"K-Means K=16", data1)
+kmedoid_sens1 <- sens_func(Kmeans = FALSE, Kmedoids = TRUE, 20, 15,"K-Mediods K=15", data1)
+kmedoid_sens2 <- sens_func(Kmeans = FALSE, Kmedoids = TRUE, 20, 16, "K-Mediods K=16", data1)
+
+kmedoid_sens1$y <- kmedoid_sens1$y+0.05
+sens_results <- rbind(kmeans_sens1,kmeans_sens2, kmedoid_sens1, kmedoid_sens2)
+# save(sens_results, file = "R Data/Sensitivity Average Scaled Silhoutte Scores.RData" )
+
+sensitivity_plot_func(sens_results)
+summary_silhouette_stats(sens_results, group_col = "group", score_col= "y")
+```
+
+## d)
+
+```{r}
+#| warning: false
+gap_plot <- function(results, plot_no, plot_title){
+  df <- data.frame(x = 1:nrow(results), y = results$gap)
+  gp <- ggplot(data = df, aes(x=x, y=y)) +
+  geom_point(color = "red", size = 1.5, shape = 19)+
+  geom_line(color = "black", linewidth = 0.5) +
+  geom_errorbar(aes(ymin = results$gap - results$SE.sim, 
+                 ymax = results$gap + results$SE.sim), 
+              width = 0.2, color = "darkred") +
+  labs(
+    title = paste0("Gap Statistic for ", plot_title), 
+    x = "Number of Clusters",
+    y = "Gap Statistic"
+  ) +
+  theme_minimal()+
+  theme(
+    plot.title = element_text(size = 17.5, face = "bold"),  
+    axis.title.x = element_text(size = 14),               
+    axis.title.y = element_text(size = 14),               
+    axis.text = element_text(size = 10),         
+    plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+    panel.grid.minor = element_blank()                    
+  )
+  
+  # ggsave(gp, filename = paste0("Plots/Question 2d Gap Plot ", plot_no, ".png"))
+  return(gp)  
+}
+```
+
+```{r}
+gap_stat <- clusGap(data1, FUN = kmeans, nstart = 10, K.max = 20, B = 10)
+results1 <- data.frame(gap_stat$Tab)
+gap_plot(results1, 1, "K-Means")
+
+
+gap_stat_pam <- clusGap(data, FUN = pam, K.max = 20, B = 1, variant= "f_5")
+results2 <- data.frame(gap_stat_pam$Tab)
+gap_plot(results2, 2, "K-Medoids")
+# save(gap_stat_pam, file = "R Data/Gap Statistics for K-mediods.RData" )
+```
+
+------------------------------------------------------------------------
+
+# Question 3 (Cluster Analysis)
+
+## a)
+
+```{r}
+cluster_scatter_plot <- function(clusters, centers, plot_title, plot_number, data, outliers = NULL, neg_obs = NULL){
+  cluster_data <- data.frame(
+    x = data[, 1],  
+    y = data[, 2],  
+    cluster = as.factor(clusters)
+  )
+  
+  # Create a data frame for the centers with cluster numbers
+  centers_df <- data.frame(
+    x = centers[, 1],
+    y = centers[, 2],
+    cluster = as.factor(1:nrow(centers)))
+  
+  cp <- ggplot(cluster_data, aes(x = x, y = y, color = cluster)) +
+    geom_point(size = 1, alpha = 0.7) +
+    geom_text(data = centers_df, aes(x = x, y = y, label = cluster), 
+              color = "red3", size = 3, fontface = "bold") +
+    scale_color_viridis_d(option = "D") +  
+    labs(
+      title = plot_title,
+      x = "Variable 1",
+      y = "Variable 2",
+      color = "Cluster"
+    ) +        
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 17, face = "bold"),  
+      axis.title.x = element_text(size = 14),               
+      axis.title.y = element_text(size = 14),               
+      axis.text = element_text(size = 10),                  
+      plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),     
+      panel.grid.minor = element_blank()                    
+    )
+  
+  if (!is.null(outliers)) {
+    cp <- cp + 
+      geom_point(data = cluster_data[outliers, ], 
+                 aes(x = x, y = y), 
+                 color = "deeppink", size = 2.5, shape = 8)
+  }
+  
+  if (!is.null(neg_obs)) {
+    cp <- cp + 
+      geom_point(data = cluster_data[neg_obs, ], 
+                 aes(x = x, y = y), 
+                 color = "orange", size = 3, shape = 8)
+  }
+  
+  ggsave(cp, filename = paste0("Plots/Question 3 ", plot_title," plot ", plot_number,".png"), width = 6, height = 5, dpi = 300)
+  return(cp)
+}
+```
+
+```{r}
+library(ggplot2)
+library(cluster)
+set.seed(123)
+
+sils <- c()
+
+# Cluster Plot 1 
+km_result1 <- kmeans(data1, centers = 15, nstart = 10) 
+cluster_scatter_plot(km_result1$cluster, km_result1$centers, "K-Means Clustering (k=15)", 1, data1)
+sil1 <- silhouette(km_result1$cluster, dist(data1))
+sils[1] <- mean(sil1[, 3])
+plot(sil1, border = NA, col = 2:16,
+     main = "K-means Silhouette Plot K=15")
+abline(v = sils[1], col = "red", lty = 2, lwd = 2)
+text(x = sils[1], y = 0, 
+     labels = paste0("Avg = ", round(sils[1], 3)),
+     pos = 4, col = "red")
+
+# Cluster Plot 2
+km_result2 <- kmeans(data1, centers = 16, nstart = 10) 
+cluster_scatter_plot(km_result2$cluster,  km_result2$centers, "K-Means Clustering (k=16)", 2, data1)
+sil2 <- silhouette(km_result2$cluster, dist(data1))
+sils[2] <- mean(sil2[, 3]) 
+plot(sil2, border = NA, col = 2:17,
+     main = "K-means Silhouette Plot K=16")
+abline(v = sils[2], col = "red", lty = 2, lwd = 2)
+text(x = sils[2], y = 0, 
+     labels = paste0("Avg = ", round(sils[2], 3)),
+     pos = 4, col = "red")
+
+# Cluster Plot 3
+pam_result1 <- pam(data1, k = 15, variant ="f_5") 
+cluster_scatter_plot(pam_result1$cluster, pam_result1$medoids, "K-Medoids Clustering (k=15)", 3, data1)
+clarax1 <- clara(data, 15, samples=5, sampsize = 5000)
+sil3 <- silhouette(clarax1)
+sils[3] <- mean(sil3[, 3]) 
+plot(sil3, border =NA, col = 2:16, main = paste0("K-mediods Silhouette Plot K=15"))
+abline(v = sils[3], col = "red", lty = 2, lwd = 2)
+text(x = sils[3], y = 0, 
+     labels = paste0("Avg = ", round(sils[3], 3)),
+     pos = 4, col = "red")
+
+# Cluster Plot 4
+pam_result2 <- pam(data1, k = 16, variant ="f_5") 
+cluster_scatter_plot(pam_result2$cluster, pam_result2$medoids,"K-Medoids Clustering (k=16)", 4, data1)
+clarax2 <- clara(data, 16, samples=5, sampsize = 5000)
+sil4 <- silhouette(clarax2)
+sils[4] <- mean(sil4[, 3])
+plot(sil4, border =NA,col = 2:17, main = paste0("K-mediods Silhouette Plot K=16"))
+abline(v = sils[4], col = "red", lty = 2, lwd = 2)
+text(x = sils[4], y = 0, 
+     labels = paste0("Avg = ", round(sils[4], 3)),
+     pos = 4, col = "red")
+
+sils
+```
+
+## b)
+
+```{r}
+# 1. Plotting out all the outliers in the cluster
+set.seed(123)
+initial_centers <- data1[sample(nrow(data1), 15), ]
+km_result_dirty <- kmeans(data1, centers = initial_centers, nstart = 1)
+cluster_scatter_plot(km_result_dirty$cluster, km_result_dirty$centers, "K-Means Clustering (k=15) Outliers",5 , data1, outliers = union(outliers1, outliers2))
+
+# 2. Cluster plot without the outliers
+km_result_clean <- kmeans(data2, centers = initial_centers, nstart = 1)
+cluster_scatter_plot(km_result_clean$cluster, km_result_clean$centers, "K-Means Clustering (k=15) No Outliers", 6, data2)
+```
+
+## c)
+
+```{r}
+# 1. Identifying the negative scores and plotting them out
+sil_neg <- silhouette(km_result1$cluster, dist(data1))
+neg_sil_indices <- which(sil_neg[, 3] < 0)
+cluster_scatter_plot(km_result1$cluster, km_result1$centers, "K-Means Clustering (k=15) Negative Scores",7, data1, neg_obs = neg_sil_indices)
+
+# 2. Finding all the reassignments and showing the first 5 for the report (filtered negative scores)
+fn_indices <-  neg_sil_indices[seq(1, length(neg_sil_indices), 7)]
+cluster <- sil_neg[fn_indices,1]
+neighbor <- sil_neg[fn_indices,2]
+sil_neg_obs <- sil_neg[fn_indices, 3] 
+df_neg <- data.frame(Observation = fn_indices, "Assigned Cluster" = cluster, "Nearest Neighbour" = neighbor, "Silhouette Score" = round(sil_neg_obs,3))
+kable(df_neg)
+
+# 3. Removing the negative scores and seeing if the cluser plot changed
+neighbor_clusters <- sil_neg[neg_sil_indices, "neighbor"]
+new_clusters <- km_result1$cluster
+new_clusters[neg_sil_indices] <- neighbor_clusters
+new_sil <- silhouette(new_clusters, dist(data1))
+mean(new_sil[, "sil_width"])
+cluster_scatter_plot(new_clusters, km_result1$centers, "K-Means (k=15) After  Reassignment", 8, data1, neg_obs = which(new_sil[, "sil_width"] < 0))
+
+```
